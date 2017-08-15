@@ -9,6 +9,8 @@
 
 ## DIAGRAMA DE BLOCOS
 
+![diagramq](https://user-images.githubusercontent.com/17271535/29313103-7b8e7a82-818e-11e7-9b3d-7b0598821889.png)
+
 ## TECNOLOGÍAS UTILIZADAS
  
 * Sensor de Umidade de Solo:
