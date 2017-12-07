@@ -40,9 +40,6 @@ static char server_host_name[] = MAIN_SERVER_NAME;
 uint8_t recvOk = false;
 uint8_t socketConnected = false;
 
-/************************************************************************/
-/* Defines                                                              */
-/************************************************************************/
 #define BLINK_PERIOD     1000
 int blink = BLINK_PERIOD;
 /**
@@ -60,14 +57,23 @@ int blink = BLINK_PERIOD;
 
 /**
  * Botão
- */ 
-#define BUT_PIO_ID		ID_PIOA
+ */
+#define BUT_PIO_ID      ID_PIOA
 #define BUT_PIO         PIOA
-#define BUT_PIN			6
-#define BUT_PIN_MASK	(1 << BUT_PIN)
+#define BUT_PIN		    11
+#define BUT_PIN_MASK    (1 << BUT_PIN)
+#define BUT_DEBOUNCING_VALUE  79
 
 /**
-/* Sensor de umidade de solo  /*                                                                  
+ * Botão
+ */ 
+#define BUT_EXT_PIO_ID		ID_PIOA
+#define BUT_EXT_PIO         PIOA
+#define BUT_EXT_PIN			6
+#define BUT_EXT_PIN_MASK	(1 << BUT_PIN)
+
+/**
+/* Sensor de umidade de solo  /*
 */
 #define SENSOR_PIO_ID		ID_PIOD
 #define SENSOR_PIO         PIOD
@@ -82,14 +88,14 @@ int blink = BLINK_PERIOD;
 #define VALVULA_PIN			11
 #define VALVULA_PIN_MASK	(1 << VALVULA_PIN)
 
-
 /** status da irrigação **/
 bool irr_status = false;
 
 bool sensor_status = false; 
 
+
 /************************************************************************/
-/* Funções	                                                            */
+/* Funçoes                                                             */
 /************************************************************************/
 /**
  * @Brief Inicializa o pino do LED
@@ -521,9 +527,32 @@ int main(void)
           gbTcpConnection = true;
         }
 	}
-	//leitura do botão web
 	
- 	//printf("SENSOR: \n");
+	//leitura do botao
+	
+	if( !(BUT_PIO->PIO_PDSR & BUT_PIN_MASK)  ){
+		printf("IRRIGANDO PELO BOTAO FISICO\n");
+		onIrrigacao();
+	}
+	
+	else if(irr_status==true){
+		printf("IRRIGANDO PELO BOTAO WEB\n");
+		onIrrigacao();
+	}
+	
+	//leitura sensor
+	else if ( (SENSOR_PIO->PIO_PDSR & SENSOR_PIN_MASK) ){
+		printf("IRRIGANDO PELO SENSOR\n");
+		onIrrigacao();
+	}
+	
+	else{
+		printf("IRRIGACAO DESLIGADA\n");
+		offIrrigacao();
+	}
+	
+	delay_ms(100);
+	 
 	
    }
  }
