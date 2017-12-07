@@ -40,6 +40,9 @@ static char server_host_name[] = MAIN_SERVER_NAME;
 uint8_t recvOk = false;
 uint8_t socketConnected = false;
 
+/************************************************************************/
+/* Defines                                                              */
+/************************************************************************/
 #define BLINK_PERIOD     1000
 int blink = BLINK_PERIOD;
 /**
@@ -57,19 +60,18 @@ int blink = BLINK_PERIOD;
 
 /**
  * Botão
- */
-#define BUT_PIO_ID      ID_PIOA
+ */ 
+#define BUT_PIO_ID		ID_PIOA
 #define BUT_PIO         PIOA
-#define BUT_PIN		    11
-#define BUT_PIN_MASK    (1 << BUT_PIN)
-#define BUT_DEBOUNCING_VALUE  79
+#define BUT_PIN			6
+#define BUT_PIN_MASK	(1 << BUT_PIN)
 
 /**
-/* Sensor de umidade de solo  /*
+/* Sensor de umidade de solo  /*                                                                  
 */
 #define SENSOR_PIO_ID		ID_PIOD
 #define SENSOR_PIO         PIOD
-#define SENSOR_PIN			22
+#define SENSOR_PIN			26
 #define SENSOR_PIN_MASK	(1 << SENSOR_PIN)
 
 /**
@@ -77,64 +79,70 @@ int blink = BLINK_PERIOD;
 */
 #define VALVULA_PIO_ID		ID_PIOD
 #define VALVULA_PIO         PIOD
-#define VALVULA_PIN			30
+#define VALVULA_PIN			11
 #define VALVULA_PIN_MASK	(1 << VALVULA_PIN)
+
 
 /** status da irrigação **/
 bool irr_status = false;
 
 bool sensor_status = false; 
 
-
 /************************************************************************/
-/* Funçoes                                                             */
+/* Funções	                                                            */
 /************************************************************************/
-
+/**
+ * @Brief Inicializa o pino do LED
+ */
 void ledverdeConfig(){
-	PMC->PMC_PCER0 = (1<<LED_VERDE_PIO_ID);
-	PIOC->PIO_OER  = (1 << LED_VERDE_PIN);
-	PIOC->PIO_PER  = (1 << LED_VERDE_PIN);
-	PIOC->PIO_CODR = (1 << LED_VERDE_PIN);
+	//Representa o status de irrigação ATIVO
+	PMC->PMC_PCER0 = (1<<LED_VERDE_PIO_ID);	
+	LED_VERDE_PIO->PIO_OER  = LED_VERDE_PIN_MASK;
+	LED_VERDE_PIO->PIO_PER  = LED_VERDE_PIN_MASK;
+	LED_VERDE_PIO->PIO_CODR = LED_VERDE_PIN_MASK;
 };
 
 void ledvermelhoConfig(){
+	//Representa o status de irrigação INATIVO
 	PMC->PMC_PCER0 = (1<<LED_VERMELHO_PIO_ID);
-	PIOD->PIO_OER  = (1 << LED_VERMELHO_PIN);
-	PIOD->PIO_PER  = (1 << LED_VERMELHO_PIN);
-	PIOD->PIO_CODR = (1 << LED_VERMELHO_PIN);
+	LED_VERMELHO_PIO->PIO_OER  = LED_VERMELHO_PIN_MASK;
+	LED_VERMELHO_PIO->PIO_PER  = LED_VERMELHO_PIN_MASK;
+	LED_VERMELHO_PIO->PIO_SODR = LED_VERMELHO_PIN_MASK;
 };
 
 void butConfig(){
 	PMC->PMC_PCER0= (1<<BUT_PIO_ID);
-	PIOA->PIO_PER = (1<<BUT_PIN);
-	PIOA->PIO_ODR = (1<<BUT_PIN);
-	PIOA->PIO_PUER= (1<<BUT_PIN);
-	PIOA->PIO_IFER= (1<<BUT_PIN);
+	BUT_PIO->PIO_PER = BUT_PIN_MASK;
+	BUT_PIO->PIO_ODR = BUT_PIN_MASK;
+	BUT_PIO->PIO_PUER= BUT_PIN_MASK;
+	BUT_PIO->PIO_IFER= BUT_PIN_MASK;
 };
 
 void sensorConfig(){
 	PMC->PMC_PCER0= (1<<SENSOR_PIO_ID);
-	PIOD->PIO_ODR = (1<<SENSOR_PIN);
+	SENSOR_PIO->PIO_ODR = SENSOR_PIN_MASK;	
 }
 
 void valvulaConfig(){
+	//Representada pelo LED azul na placa
 	PMC->PMC_PCER0 = (1<<VALVULA_PIO_ID);
-	PIOD->PIO_OER  = VALVULA_PIN_MASK;
-	PIOD->PIO_PER  = VALVULA_PIN_MASK;
-	PIOD->PIO_CODR = VALVULA_PIN_MASK;
+	VALVULA_PIO->PIO_OER  = VALVULA_PIN_MASK;
+	VALVULA_PIO->PIO_PER  = VALVULA_PIN_MASK;
+	VALVULA_PIO->PIO_CODR = VALVULA_PIN_MASK;
 };
 
 void offIrrigacao(){
-	PIOC->PIO_SODR = (1 << LED_VERDE_PIN);
-	PIOD->PIO_CODR = (1 << LED_VERMELHO_PIN);
-	PIOD->PIO_CODR = VALVULA_PIN_MASK;
+	LED_VERDE_PIO->PIO_SODR = LED_VERDE_PIN_MASK; //apaga led verde (status: INATIVO)
+	LED_VERMELHO_PIO->PIO_CODR = LED_VERMELHO_PIN_MASK; //acende led vermelho (status: INATIVO)
+	VALVULA_PIO->PIO_SODR = VALVULA_PIN_MASK;	//apaga led azul (valvula DESLIGADA)
 };
 
 void onIrrigacao(){
-	PIOC->PIO_CODR = (1 << LED_VERDE_PIN);
-	PIOD->PIO_SODR = (1 << LED_VERMELHO_PIN);
-	PIOD->PIO_SODR = VALVULA_PIN_MASK;
+	LED_VERDE_PIO->PIO_CODR = LED_VERDE_PIN_MASK; //acende led verde	(status: ATIVO)
+	LED_VERMELHO_PIO->PIO_SODR = LED_VERMELHO_PIN_MASK; //apaga led vermelho (status: ATIVO)
+	VALVULA_PIO->PIO_CODR = VALVULA_PIN_MASK; //acende led azul (valvula DESLIGADA)
 }
+
 
 /************************************************************************/
 /* prototype                                                             */
@@ -515,30 +523,9 @@ int main(void)
 	}
 	//leitura do botão web
 	
- 	printf("SENSOR: \n");
+ 	//printf("SENSOR: \n");
 	
-// 	if( !(BUT_PIO->PIO_PDSR & BUT_PIN_MASK)  ){ //mudar essa condição para valor do GET == 'on'
-// 		onIrrigacao();
-// 		printf("IRRIGACAO ON");
-// 		//mudar status do web para ativo fazendo um POST
-// 	}
-// 	
-// 	//leitura sensor
-	if ( (PIOD->PIO_PDSR & SENSOR_PIN_MASK) ){
-// 		onIrrigacao();
- 		printf("IRRIGACAO ON");
-// 		//mudar status do web para ativo fazendo um POST
- 	}
-// 
-// 	else{
-// 		offIrrigacao();
-// 		printf("  ");
-// 		//mudar status do web para inativo fazendo um POST
-// 	}
-// 	
-// 	delay_ms(50);
-// 	
-    }
+   }
  }
 
 
