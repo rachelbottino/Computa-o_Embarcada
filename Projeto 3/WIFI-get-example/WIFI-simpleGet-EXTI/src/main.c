@@ -70,7 +70,7 @@ int blink = BLINK_PERIOD;
 #define BUT_EXT_PIO_ID		ID_PIOA
 #define BUT_EXT_PIO         PIOA
 #define BUT_EXT_PIN			6
-#define BUT_EXT_PIN_MASK	(1 << BUT_PIN)
+#define BUT_EXT_PIN_MASK	(1 << BUT_EXT_PIN)
 
 /**
 /* Sensor de umidade de solo  /*
@@ -87,6 +87,14 @@ int blink = BLINK_PERIOD;
 #define VALVULA_PIO         PIOD
 #define VALVULA_PIN			11
 #define VALVULA_PIN_MASK	(1 << VALVULA_PIN)
+
+#define YEAR        2017
+#define MOUNTH      12
+#define DAY         07
+#define WEEK        49
+#define HOUR        18
+#define MINUTE      24
+#define SECOND      0
 
 /** status da irrigação **/
 bool irr_status = false;
@@ -117,11 +125,11 @@ void ledvermelhoConfig(){
 };
 
 void butConfig(){
-	PMC->PMC_PCER0= (1<<BUT_PIO_ID);
-	BUT_PIO->PIO_PER = BUT_PIN_MASK;
-	BUT_PIO->PIO_ODR = BUT_PIN_MASK;
-	BUT_PIO->PIO_PUER= BUT_PIN_MASK;
-	BUT_PIO->PIO_IFER= BUT_PIN_MASK;
+	PMC->PMC_PCER0= (1<<BUT_EXT_PIO_ID);
+	BUT_EXT_PIO->PIO_PER = BUT_EXT_PIN_MASK;
+	BUT_EXT_PIO->PIO_ODR = BUT_EXT_PIN_MASK;
+	BUT_EXT_PIO->PIO_PUER= BUT_EXT_PIN_MASK;
+	BUT_EXT_PIO->PIO_IFER= BUT_EXT_PIN_MASK;
 };
 
 void sensorConfig(){
@@ -153,12 +161,72 @@ void onIrrigacao(){
 /************************************************************************/
 /* prototype                                                             */
 /************************************************************************/
+void TC1_init(int freq);
+void TC1_Handler(void);
 void but_init(void);
 void but_Handler();
 
 /************************************************************************/
 /* Interrupçcões                                                        */
 /************************************************************************/
+void TC1_init(int freq){
+	uint32_t ul_div;
+	uint32_t ul_tcclks;
+	uint32_t ul_sysclk = sysclk_get_cpu_hz();
+	
+	uint32_t channel = 1;
+	
+	/* Configura o PMC */
+	pmc_enable_periph_clk(ID_TC1);
+	
+	/** Configura o TC para operar em  4Mhz e interrupçcão no RC compare */
+	tc_find_mck_divisor(freq, ul_sysclk, &ul_div, &ul_tcclks, ul_sysclk);
+	tc_init(TC0, channel, ul_tcclks | TC_CMR_CPCTRG);
+	tc_write_rc(TC0, channel, (ul_sysclk / ul_div) / freq);
+
+	/* Configura e ativa interrupçcão no TC canal 0 */
+	NVIC_EnableIRQ((IRQn_Type) ID_TC1);
+	tc_enable_interrupt(TC0, channel, TC_IER_CPCS);
+
+	/* Inicializa o canal 0 do TC */
+	tc_start(TC0, channel);
+}
+
+void TC1_Handler(void){
+	volatile uint32_t ul_dummy;
+	
+	
+	ul_dummy = tc_get_status(TC0, 1);
+
+	UNUSED(ul_dummy);
+	
+	
+	uint32_t pioIntStatus;
+	pioIntStatus =  pio_get_interrupt_status(BUT_PIO);
+	printf("sending ....\n");
+	
+	memset(gau8ReceivedBuffer, 0, sizeof(gau8ReceivedBuffer));
+	sprintf((char *)gau8ReceivedBuffer, "%s", MAIN_PREFIX_BUFFER);
+	printf("\n");
+		
+	if(socketConnected){
+		//printf("POST \n");
+		//sprintf(gau8PostBuffer,"POST / HTTP/1.1\r\n %s Accept: */*\r\n\r\n", 42);
+		//sprintf(gau8PostBuffer,"POST / HTTP/1.1\r\n status=on r\n");
+			
+		//printf(gau8PostBuffer);
+		//send(tcp_client_socket, gau8PostBuffer, strlen((char *)gau8PostBuffer), 0);		
+		
+
+		printf("send \n");
+		send(tcp_client_socket, gau8ReceivedBuffer, strlen((char *)gau8ReceivedBuffer), 0);
+		memset(gau8ReceivedBuffer, 0, MAIN_WIFI_M2M_BUFFER_SIZE);
+		recv(tcp_client_socket, &gau8ReceivedBuffer[0], MAIN_WIFI_M2M_BUFFER_SIZE, 0);
+		recvOk = false;
+	}
+}
+
+
 void but_Handler(){
 	uint32_t pioIntStatus;
 	pioIntStatus =  pio_get_interrupt_status(BUT_PIO);
@@ -171,7 +239,7 @@ void but_Handler(){
 	if(socketConnected){
 		//printf("POST \n");
 		//sprintf(gau8PostBuffer,"POST / HTTP/1.1\r\n %s Accept: */*\r\n\r\n", 42);
-		//sprintf(gau8PostBuffer,"POST / HTTP/1.1\r\n { status : '' } Accept: */*\r\n\r\n", "on");
+		//sprintf(gau8PostBuffer,"POST / HTTP/1.1\r\n status=on r\n");
 			
 		//printf(gau8PostBuffer);
 		//send(tcp_client_socket, gau8PostBuffer, strlen((char *)gau8PostBuffer), 0);		
@@ -458,6 +526,10 @@ int main(void)
 	/* Inicializa Botao */
 	but_init();
 	
+	/** Inicia timer 1 */
+	TC1_init(0.5);
+
+	
 	/************************************************************************/
 	/* Inicializa perifericos                                               */
 	/************************************************************************/
@@ -530,29 +602,28 @@ int main(void)
 	
 	//leitura do botao
 	
-	if( !(BUT_PIO->PIO_PDSR & BUT_PIN_MASK)  ){
-		printf("IRRIGANDO PELO BOTAO FISICO\n");
+	if( !(BUT_EXT_PIO->PIO_PDSR & BUT_EXT_PIN_MASK)  ){
+		//printf("IRRIGANDO PELO BOTAO FISICO\n");
 		onIrrigacao();
 	}
 	
 	else if(irr_status==true){
-		printf("IRRIGANDO PELO BOTAO WEB\n");
+		//printf("IRRIGANDO PELO BOTAO WEB\n");
 		onIrrigacao();
 	}
 	
 	//leitura sensor
 	else if ( (SENSOR_PIO->PIO_PDSR & SENSOR_PIN_MASK) ){
-		printf("IRRIGANDO PELO SENSOR\n");
+		//printf("IRRIGANDO PELO SENSOR\n");
 		onIrrigacao();
 	}
 	
 	else{
-		printf("IRRIGACAO DESLIGADA\n");
+		//printf("IRRIGACAO DESLIGADA\n");
 		offIrrigacao();
 	}
 	
 	delay_ms(100);
-	 
 	
    }
  }
