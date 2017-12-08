@@ -7,6 +7,7 @@ var fs = require('fs');
 var busboy = require("then-busboy");
 var fileUpload = require('express-fileupload');
 var status;
+var emb_status;
 var valor;
 
 /*Set EJS template Engine*/
@@ -21,7 +22,7 @@ app.use(fileUpload());
 
 app.get('/', function (req, res) {
 	console.log("get do /");
-    if (status == 'on'){
+    if (emb_status == 'on'){
         irrig = 'ativa';
     }
     else {
@@ -37,10 +38,11 @@ app.post('/', function(req, res) {
 
     if(req.method == "POST"){
         console.log("Entrou no post! \nStatus:");
-        console.log(req.query);
-        console.log(req.body);
         status = req.body.status;
+        emb_status = req.body.emb;
         console.log(status);
+        console.log(emb_status);
+        res.redirect('/');
     } 
     else {
         res.redirect('/status');

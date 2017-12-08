@@ -50,9 +50,9 @@ int blink = BLINK_PERIOD;
 #define LED_VERDE_PIN			13
 #define LED_VERDE_PIN_MASK	(1<<LED_VERDE_PIN) 
 
-#define LED_VERMELHO_PIO_ID		ID_PIOD
-#define LED_VERMELHO_PIO         PIOD
-#define LED_VERMELHO_PIN		30
+#define LED_VERMELHO_PIO_ID		ID_PIOA
+#define LED_VERMELHO_PIO         PIOA
+#define LED_VERMELHO_PIN		4
 #define LED_VERMELHO_PIN_MASK	(1<<LED_VERMELHO_PIN)
 
 /**
@@ -83,10 +83,10 @@ int blink = BLINK_PERIOD;
 #define SENSOR_PIN_MASK	(1 << SENSOR_PIN)
 
 //ANALOGICO
-#define SENSOR_A_PIO_ID		ID_PIOA
-#define SENSOR_A_PIO         PIOA
-#define SENSOR_A_PIN			4
-#define SENSOR_A_PIN_MASK	(1 << SENSOR_A_PIN)
+// #define SENSOR_A_PIO_ID		ID_PIOD
+// #define SENSOR_A_PIO         PIOD
+// #define SENSOR_A_PIN			30
+// #define SENSOR_A_PIN_MASK	(1 << SENSOR_A_PIN)
 
 /**
 /* Válvula solenoide /*
@@ -107,13 +107,32 @@ int blink = BLINK_PERIOD;
 /** status da irrigação **/
 bool irr_status = false;
 
-bool sensor_status = false;
+bool emb_status = false;
+
+/** Reference voltage for AFEC,in mv. */
+#define VOLT_REF        (3300)
+
+/** The maximal digital value */
+/** 2^12 - 1                  */
+#define MAX_DIGITAL     (4095UL)
+
+/** The conversion data is done flag */
+volatile bool is_conversion_done = false;
+
+/** The conversion data value */
+volatile uint32_t g_ul_value = 0;
+
+/* Canal do sensor de umidade */
+#define AFEC_CHANNEL_SENSOR 30
 
 /* buffer para recebimento de umidade */
  uint8_t buffer[100];
  
   /*umidade*/
   uint8_t umidade;
+  
+  #define POST_SUFIX "HTTP/1.1\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: "
+  #define HTTP_END "\r\n"
 
 
 /************************************************************************/
@@ -150,11 +169,11 @@ void sensorConfig(){
 	PMC->PMC_PCER0= (1<<SENSOR_PIO_ID);
 	SENSOR_PIO->PIO_ODR = SENSOR_PIN_MASK;	
 }
-
-void sensor_analogConfig(){
-	PMC->PMC_PCER0= (1<<SENSOR_A_PIO_ID);
-	SENSOR_A_PIO->PIO_ODR = SENSOR_A_PIN_MASK;
-}
+// 
+// void sensor_analogConfig(){
+// 	PMC->PMC_PCER0= (1<<SENSOR_A_PIO_ID);
+// 	SENSOR_A_PIO->PIO_ODR = SENSOR_A_PIN_MASK;
+// }
 
 void valvulaConfig(){
 	//Representada pelo LED azul na placa
@@ -168,13 +187,37 @@ void offIrrigacao(){
 	LED_VERDE_PIO->PIO_SODR = LED_VERDE_PIN_MASK; //apaga led verde (status: INATIVO)
 	LED_VERMELHO_PIO->PIO_CODR = LED_VERMELHO_PIN_MASK; //acende led vermelho (status: INATIVO)
 	VALVULA_PIO->PIO_SODR = VALVULA_PIN_MASK;	//apaga led azul (valvula DESLIGADA)
+	emb_status = false;
 };
 
 void onIrrigacao(){
 	LED_VERDE_PIO->PIO_CODR = LED_VERDE_PIN_MASK; //acende led verde	(status: ATIVO)
 	LED_VERMELHO_PIO->PIO_SODR = LED_VERMELHO_PIN_MASK; //apaga led vermelho (status: ATIVO)
 	VALVULA_PIO->PIO_CODR = VALVULA_PIN_MASK; //acende led azul (valvula DESLIGADA)
+	emb_status = true;
 }
+
+void build_post(uint8_t *buff, char *route, char *query) {
+
+	// Get content length
+	static uint8_t content_length[20] = {0};
+	sprintf(content_length, "%lu", strlen(query));
+
+	sprintf(
+	buff,
+	"%s %s %s%s%s%s%s",
+	"POST",
+	route,
+	POST_SUFIX,
+	content_length,
+	HTTP_END,
+	HTTP_END,
+	query
+	);
+
+	printf("%s\n", buff);
+}
+
 
 
 /************************************************************************/
@@ -188,6 +231,13 @@ void but_Handler();
 /************************************************************************/
 /* Interrupçcões                                                        */
 /************************************************************************/
+
+static void AFEC_Temp_callback(void)
+{
+	g_ul_value = afec_channel_get_value(AFEC0, AFEC_CHANNEL_SENSOR);
+	is_conversion_done = true;
+}
+
 void TC1_init(int freq){
 	uint32_t ul_div;
 	uint32_t ul_tcclks;
@@ -219,9 +269,6 @@ void TC1_Handler(void){
 
 	UNUSED(ul_dummy);
 	
-	
-	uint32_t pioIntStatus;
-	pioIntStatus =  pio_get_interrupt_status(BUT_PIO);
 	printf("sending ....\n");
 	
 	memset(gau8ReceivedBuffer, 0, sizeof(gau8ReceivedBuffer));
@@ -250,7 +297,13 @@ void but_Handler(){
 		
 	if(socketConnected){
 		printf("POST \n");
-		sprintf(gau8PostBuffer,"POST / HTTP/1.1\r\n %s Accept: */*\r\n\r\n", 42);
+		if(emb_status==true){
+			build_post(gau8PostBuffer,"/","emb=on");	
+		}
+		else{
+			build_post(gau8PostBuffer,"/","emb=off");
+		}
+		//sprintf(gau8PostBuffer,"POST / HTTP/1.1\r\n %s Accept: */*\r\n\r\n", 42);
 		//sprintf(gau8PostBuffer,"POST / HTTP/1.1\r\n status=on r\n");
 			
 		printf(gau8PostBuffer);
@@ -532,6 +585,52 @@ int main(void)
 	
 	/** Inicia timer 1 */
 	TC1_init(0.5);
+	
+		 /************************************* 
+   * Ativa e configura AFEC
+   *************************************/  
+
+  /* Ativa AFEC - 0 */
+	afec_enable(AFEC0);
+
+  /* struct de configuracao do AFEC */
+	struct afec_config afec_cfg;
+
+  /* Carrega parametros padrao */
+	afec_get_config_defaults(&afec_cfg);
+
+  /* Configura AFEC */
+	afec_init(AFEC0, &afec_cfg);
+  
+  /* Configura trigger por software */
+	afec_set_trigger(AFEC0, AFEC_TRIG_SW);
+  
+  /* configura call back */
+ 	afec_set_callback(AFEC0, AFEC_INTERRUPT_EOC_4,	AFEC_Temp_callback, 1); 
+   
+  /*** Configuracao específica do canal AFEC ***/
+	struct afec_ch_config afec_ch_cfg;
+	afec_ch_get_config_defaults(&afec_ch_cfg);
+	afec_ch_cfg.gain = AFEC_GAINVALUE_0;
+	afec_ch_set_config(AFEC0, AFEC_CHANNEL_SENSOR, &afec_ch_cfg);
+	
+	/*
+   * Calibracao:
+	 * Because the internal ADC offset is 0x200, it should cancel it and shift
+	 * down to 0.
+	 */
+	afec_channel_set_analog_offset(AFEC0, AFEC_CHANNEL_SENSOR, 0x200);
+
+  /***  Configura sensor de temperatura ***/
+  struct afec_temp_sensor_config afec_temp_sensor_cfg;
+
+  afec_temp_sensor_get_config_defaults(&afec_temp_sensor_cfg);
+  afec_temp_sensor_set_config(AFEC0, &afec_temp_sensor_cfg);
+
+  /* Selecina canal e inicializa conversão */
+  afec_channel_enable(AFEC0, AFEC_CHANNEL_SENSOR);
+  afec_start_software_conversion(AFEC0);
+  
 
 	
 	/************************************************************************/
@@ -546,7 +645,7 @@ int main(void)
 		
 	//Configura Sensor
 	sensorConfig();
-	sensor_analogConfig();
+	//sensor_analogConfig();
 		
 	//Configura valvula
 	valvulaConfig();
@@ -604,24 +703,30 @@ int main(void)
           gbTcpConnection = true;
         }
 	}
-	umidade = SENSOR_A_PIO->PIO_ODSR;
-	sprintf(buffer, "Umidade : %d  \r\n",umidade);
-	printf(buffer);
+	
+	if(is_conversion_done == true) {
+		is_conversion_done = false;
+		umidade = (g_ul_value);
+		
+		printf("umidade : %d \r\n",(g_ul_value));
+		afec_start_software_conversion(AFEC0);
+		delay_s(1);
+	}
 	
 	//leitura do botao	
 	if( !(BUT_EXT_PIO->PIO_PDSR & BUT_EXT_PIN_MASK)  ){
-		//printf("IRRIGANDO PELO BOTAO FISICO\n");
+		printf("IRRIGANDO PELO BOTAO FISICO\n");
 		onIrrigacao();
 	}
 	
 	else if(irr_status==true){
-		//printf("IRRIGANDO PELO BOTAO WEB\n");
+		printf("IRRIGANDO PELO BOTAO WEB\n");
 		onIrrigacao();
 	}
 	
 	//leitura sensor
 	else if ( (SENSOR_PIO->PIO_PDSR & SENSOR_PIN_MASK) ){
-		//printf("IRRIGANDO PELO SENSOR\n");
+		printf("IRRIGANDO PELO SENSOR\n");
 		onIrrigacao();
 	}
 	
