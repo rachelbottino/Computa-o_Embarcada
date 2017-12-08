@@ -75,10 +75,18 @@ int blink = BLINK_PERIOD;
 /**
 /* Sensor de umidade de solo  /*
 */
+
+//DIGITAL
 #define SENSOR_PIO_ID		ID_PIOD
 #define SENSOR_PIO         PIOD
 #define SENSOR_PIN			26
 #define SENSOR_PIN_MASK	(1 << SENSOR_PIN)
+
+//ANALOGICO
+#define SENSOR_A_PIO_ID		ID_PIOA
+#define SENSOR_A_PIO         PIOA
+#define SENSOR_A_PIN			4
+#define SENSOR_A_PIN_MASK	(1 << SENSOR_A_PIN)
 
 /**
 /* Válvula solenoide /*
@@ -99,7 +107,13 @@ int blink = BLINK_PERIOD;
 /** status da irrigação **/
 bool irr_status = false;
 
-bool sensor_status = false; 
+bool sensor_status = false;
+
+/* buffer para recebimento de umidade */
+ uint8_t buffer[100];
+ 
+  /*umidade*/
+  uint8_t umidade;
 
 
 /************************************************************************/
@@ -135,6 +149,11 @@ void butConfig(){
 void sensorConfig(){
 	PMC->PMC_PCER0= (1<<SENSOR_PIO_ID);
 	SENSOR_PIO->PIO_ODR = SENSOR_PIN_MASK;	
+}
+
+void sensor_analogConfig(){
+	PMC->PMC_PCER0= (1<<SENSOR_A_PIO_ID);
+	SENSOR_A_PIO->PIO_ODR = SENSOR_A_PIN_MASK;
 }
 
 void valvulaConfig(){
@@ -210,14 +229,7 @@ void TC1_Handler(void){
 	printf("\n");
 		
 	if(socketConnected){
-		//printf("POST \n");
-		//sprintf(gau8PostBuffer,"POST / HTTP/1.1\r\n %s Accept: */*\r\n\r\n", 42);
-		//sprintf(gau8PostBuffer,"POST / HTTP/1.1\r\n status=on r\n");
-			
-		//printf(gau8PostBuffer);
-		//send(tcp_client_socket, gau8PostBuffer, strlen((char *)gau8PostBuffer), 0);		
 		
-
 		printf("send \n");
 		send(tcp_client_socket, gau8ReceivedBuffer, strlen((char *)gau8ReceivedBuffer), 0);
 		memset(gau8ReceivedBuffer, 0, MAIN_WIFI_M2M_BUFFER_SIZE);
@@ -237,20 +249,12 @@ void but_Handler(){
 	printf("\n");
 		
 	if(socketConnected){
-		//printf("POST \n");
-		//sprintf(gau8PostBuffer,"POST / HTTP/1.1\r\n %s Accept: */*\r\n\r\n", 42);
+		printf("POST \n");
+		sprintf(gau8PostBuffer,"POST / HTTP/1.1\r\n %s Accept: */*\r\n\r\n", 42);
 		//sprintf(gau8PostBuffer,"POST / HTTP/1.1\r\n status=on r\n");
 			
-		//printf(gau8PostBuffer);
-		//send(tcp_client_socket, gau8PostBuffer, strlen((char *)gau8PostBuffer), 0);		
-		
-
-		printf("send \n");
-		send(tcp_client_socket, gau8ReceivedBuffer, strlen((char *)gau8ReceivedBuffer), 0);
-		memset(gau8ReceivedBuffer, 0, MAIN_WIFI_M2M_BUFFER_SIZE);
-		recv(tcp_client_socket, &gau8ReceivedBuffer[0], MAIN_WIFI_M2M_BUFFER_SIZE, 0);
-		recvOk = false;
-
+		printf(gau8PostBuffer);
+		send(tcp_client_socket, gau8PostBuffer, strlen((char *)gau8PostBuffer), 0);
 	}
 }
 
@@ -542,6 +546,7 @@ int main(void)
 		
 	//Configura Sensor
 	sensorConfig();
+	sensor_analogConfig();
 		
 	//Configura valvula
 	valvulaConfig();
@@ -599,9 +604,11 @@ int main(void)
           gbTcpConnection = true;
         }
 	}
+	umidade = SENSOR_A_PIO->PIO_ODSR;
+	sprintf(buffer, "Umidade : %d  \r\n",umidade);
+	printf(buffer);
 	
-	//leitura do botao
-	
+	//leitura do botao	
 	if( !(BUT_EXT_PIO->PIO_PDSR & BUT_EXT_PIN_MASK)  ){
 		//printf("IRRIGANDO PELO BOTAO FISICO\n");
 		onIrrigacao();

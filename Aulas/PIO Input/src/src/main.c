@@ -35,6 +35,38 @@
 #define BUT_PIN_MASK    (1 << BUT_PIN)
 #define BUT_DEBOUNCING_VALUE  79
 
+
+/**
+ * Botão
+ */
+#define BUT_PIO_ID      ID_PIOA
+#define BUT_PIO         PIOA
+#define BUT_PIN		    11
+#define BUT_PIN_MASK    (1 << BUT_PIN)
+#define BUT_DEBOUNCING_VALUE  79
+
+#define BUT1_PIO_ID      ID_PIOA
+#define BUT1_PIO         PIOA
+#define BUT1_PIN		    2
+#define BUT1_PIN_MASK    (1 << BUT1_PIN)
+#define BUT1_DEBOUNCING_VALUE  79
+
+#define BUT2_PIO_ID      ID_PIOD
+#define BUT2_PIO         PIOD
+#define BUT2_PIN		 30
+#define BUT2_PIN_MASK    (1 << BUT2_PIN)
+#define BUT2_DEBOUNCING_VALUE  79
+
+#define BUT3_PIO_ID      ID_PIOC
+#define BUT3_PIO         PIOC
+#define BUT3_PIN		 13
+#define BUT3_PIN_MASK    (1 << BUT3_PIN)
+#define BUT3_DEBOUNCING_VALUE  79
+
+/** pisca led status **/
+bool pisca_status = false;
+uint32_t pisca_delay = 500;
+
 /************************************************************************/
 /* Prototipação                                                        */
 /************************************************************************/
@@ -57,6 +89,16 @@ void ledConfig(int estado){
     LED_PIO->PIO_SODR = LED_PIN_MASK;       // Coloca 1 na saída                (SET Output Data register)
 };
 
+void butConfig(Pio *but_pio, const uint32_t but_mask,  const uint32_t but_id){
+	// Configura botao
+	PMC->PMC_PCER0      = (1<<but_id);     // Ativa clock do periférico no PMC
+	but_pio->PIO_ODR	  = but_mask;        // Desativa saída                   (Output DISABLE register)
+	but_pio->PIO_PER	  = but_mask;        // Ativa controle do pino no PIO    (PIO ENABLE register)
+	but_pio->PIO_PUER	  = but_mask;        // Ativa pull-up no PIO             (PullUp ENABLE register)
+	but_pio->PIO_IFER	  = but_mask;        // Ativa debouncing
+	but_pio->PIO_IFSCER = but_mask;        // Ativa clock periferico
+}
+
 
 /************************************************************************/
 /* Main                                                                 */
@@ -74,17 +116,11 @@ int main(void)
 	/* Inicializa perifericos                                               */
 	/************************************************************************/
 	// Configura LED em modo saída
-	ledConfig();
-
-	// Configura botao
-	PMC->PMC_PCER0      = (1<<BUT_PIO_ID);     // Ativa clock do periférico no PMC
-	BUT_PIO->PIO_ODR	  = BUT_PIN_MASK;        // Desativa saída                   (Output DISABLE register)
-	BUT_PIO->PIO_PER	  = BUT_PIN_MASK;        // Ativa controle do pino no PIO    (PIO ENABLE register)
-	BUT_PIO->PIO_PUER	  = BUT_PIN_MASK;        // Ativa pull-up no PIO             (PullUp ENABLE register)
-	BUT_PIO->PIO_IFER	  = BUT_PIN_MASK;        // Ativa debouncing
-	BUT_PIO->PIO_IFSCER = BUT_PIN_MASK;        // Ativa clock periferico
-	BUT_PIO->PIO_SCDR	  = BUT_DEBOUNCING_VALUE;// Configura a frequencia do debouncing
-
+	ledConfig(1);
+	butConfig(BUT_PIO, BUT_PIN_MASK, BUT_PIO_ID);
+	butConfig(BUT1_PIO, BUT1_PIN_MASK, BUT1_PIO_ID);
+	butConfig(BUT3_PIO, BUT3_PIN_MASK, BUT3_PIO_ID);
+	
 	/************************************************************************/
 	/* Super loop                                                           */
 	/************************************************************************/
@@ -94,11 +130,21 @@ int main(void)
      * 1 : não apertado
      * 0 : apertado
      */
-    if(BUT_PIO->PIO_PDSR & (BUT_PIN_MASK)){
-			LED_PIO->PIO_CODR = LED_PIN_MASK;
-    }
-		else{
-			LED_PIO->PIO_SODR = LED_PIN_MASK;
-    }
+		
+		if(!(BUT_PIO->PIO_PDSR & BUT_PIN_MASK)){
+			//mudando status do botao
+			pisca_status = !pisca_status;
+		}
+		if(!(BUT1_PIO->PIO_PDSR & BUT1_PIN_MASK)){
+			pisca_delay += 10;
+		}
+		if(!(BUT3_PIO->PIO_PDSR & BUT3_PIN_MASK)){
+			pisca_delay -= 10;
+		}		
+		if(pisca_status){
+			pio_set(LED_PIO,LED_PIN_MASK);
+			delay_ms(60);
+			pio_clear(LED_PIO, LED_PIN_MASK); 
+		}
 	};
 }
