@@ -8,6 +8,7 @@ var busboy = require("then-busboy");
 var fileUpload = require('express-fileupload');
 var status;
 var emb_status;
+var umid;
 var valor;
 
 /*Set EJS template Engine*/
@@ -29,7 +30,7 @@ app.get('/', function (req, res) {
         irrig = 'inativa';
     }
     console.log(irrig);
-    res.render('index', {irrig:irrig});
+    res.render('index', {irrig:irrig, umid:umid});
  });
 
 app.post('/', function(req, res) {
@@ -40,8 +41,10 @@ app.post('/', function(req, res) {
         console.log("Entrou no post! \nStatus:");
         status = req.body.status;
         emb_status = req.body.emb;
+        umid = req.body.umidade;
         console.log(status);
         console.log(emb_status);
+        console.log(umid);
         res.redirect('/');
     } 
     else {

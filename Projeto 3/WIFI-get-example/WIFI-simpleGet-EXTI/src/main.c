@@ -83,10 +83,10 @@ int blink = BLINK_PERIOD;
 #define SENSOR_PIN_MASK	(1 << SENSOR_PIN)
 
 //ANALOGICO
-// #define SENSOR_A_PIO_ID		ID_PIOD
-// #define SENSOR_A_PIO         PIOD
-// #define SENSOR_A_PIN			30
-// #define SENSOR_A_PIN_MASK	(1 << SENSOR_A_PIN)
+ #define SENSOR_A_PIO_ID		ID_PIOD
+ #define SENSOR_A_PIO         PIOD
+ #define SENSOR_A_PIN			30
+ #define SENSOR_A_PIN_MASK	(1 << SENSOR_A_PIN)
 
 /**
 /* Válvula solenoide /*
@@ -123,10 +123,12 @@ volatile bool is_conversion_done = false;
 volatile uint32_t g_ul_value = 0;
 
 /* Canal do sensor de umidade */
-#define AFEC_CHANNEL_SENSOR 30
+#define AFEC_CHANNEL_SENSOR 0
 
 /* buffer para recebimento de umidade */
  uint8_t buffer[100];
+ 
+ uint8_t valores_post[100];
  
   /*umidade*/
   uint8_t umidade;
@@ -232,7 +234,8 @@ void but_Handler();
 /* Interrupçcões                                                        */
 /************************************************************************/
 
-static void AFEC_Temp_callback(void)
+
+static void AFEC_callback(void)
 {
 	g_ul_value = afec_channel_get_value(AFEC0, AFEC_CHANNEL_SENSOR);
 	is_conversion_done = true;
@@ -297,11 +300,14 @@ void but_Handler(){
 		
 	if(socketConnected){
 		printf("POST \n");
+		printf("umidade: %d", umidade);
 		if(emb_status==true){
-			build_post(gau8PostBuffer,"/","emb=on");	
+			sprintf(valores_post, "emb=on&umidade=%d", umidade);
+			build_post(gau8PostBuffer,"/",valores_post);	
 		}
 		else{
-			build_post(gau8PostBuffer,"/","emb=off");
+			sprintf(valores_post, "emb=off&umidade=%d", umidade);
+			build_post(gau8PostBuffer,"/",valores_post);
 		}
 		//sprintf(gau8PostBuffer,"POST / HTTP/1.1\r\n %s Accept: */*\r\n\r\n", 42);
 		//sprintf(gau8PostBuffer,"POST / HTTP/1.1\r\n status=on r\n");
@@ -606,7 +612,7 @@ int main(void)
 	afec_set_trigger(AFEC0, AFEC_TRIG_SW);
   
   /* configura call back */
- 	afec_set_callback(AFEC0, AFEC_INTERRUPT_EOC_4,	AFEC_Temp_callback, 1); 
+ 	afec_set_callback(AFEC0, AFEC_INTERRUPT_EOC_0,	AFEC_callback, 1); 
    
   /*** Configuracao específica do canal AFEC ***/
 	struct afec_ch_config afec_ch_cfg;
@@ -707,8 +713,7 @@ int main(void)
 	if(is_conversion_done == true) {
 		is_conversion_done = false;
 		umidade = (g_ul_value);
-		
-		printf("umidade : %d \r\n",(g_ul_value));
+		//printf("umidade : %d \r\n",(g_ul_value));
 		afec_start_software_conversion(AFEC0);
 		delay_s(1);
 	}
