@@ -84,7 +84,6 @@ void pin_toggle(Pio *pio, uint32_t mask){
     pio_set(pio,mask);
 }
 
-
 /**
  * @Brief Inicializa o pino do BUT
  */
@@ -118,25 +117,25 @@ void LED_init(int estado){
 static void USART1_init(void){
   
   /* Configura USART1 Pinos */
- sysclk_enable_peripheral_clock(ID_PIOB); // ativa clock do periferico (TXD1 - PB4) 
- sysclk_enable_peripheral_clock(ID_PIOA); // ativa clock do periferico (RXD1 - PA21)
- pio_set_peripheral(PIOB, PIO_PERIPH_D, PIO_PB4);  // RX (pino PB4 do PIO B entra no periferico D da UART)
- pio_set_peripheral(PIOA, PIO_PERIPH_A, PIO_PA21); // TX (pino PA21 do PIO A sai do periferico A da UART)
+ sysclk_enable_peripheral_clock(ID_PIOB);
+ sysclk_enable_peripheral_clock(ID_PIOA);
+ pio_set_peripheral(PIOB, PIO_PERIPH_D, PIO_PB4);  // RX
+ pio_set_peripheral(PIOA, PIO_PERIPH_A, PIO_PA21); // TX
  MATRIX->CCFG_SYSIO |= CCFG_SYSIO_SYSIO4;
   
   /* Configura opcoes USART */
   const sam_usart_opt_t usart_settings = {
     .baudrate     = 115200,
     .char_length  = US_MR_CHRL_8_BIT,
-    .parity_type  = US_MR_PAR_NO, //sem paridade
-    .stop_bits    = US_MR_NBSTOP_1_BIT, //1 stop bit
+    .parity_type  = US_MR_PAR_NO,
+    .stop_bits    = US_MR_NBSTOP_1_BIT    ,
     .channel_mode = US_MR_CHMODE_NORMAL
   };
 
   /* Ativa Clock periferico USART0 */
   sysclk_enable_peripheral_clock(USART_COM_ID);
   
-  /* Configura USART para operar em modo RS232 (como uma UART) */
+  /* Configura USART para operar em modo RS232 */
   usart_init_rs232(USART_COM, &usart_settings, sysclk_get_peripheral_hz());
   
   /* Enable the receiver and transmitter. */
@@ -152,18 +151,15 @@ static void USART1_init(void){
  * Retorna a quantidade de char escritos
  */
 uint32_t usart_puts(uint8_t *pstring){
-	uint32_t n;
-	for(n=0; pstring[n] != NULL; n++){
-		usart_serial_putchar(USART1, pstring[n]);
-		while(uart_is_tx_empty(ID_USART1)==1){
-			/** transmissao do dado ainda não finalizada
-				é necessário esperar o valor retornado da 
-				função uart_is_tx_empty() ser igual a 0	
-				para continuar a enviar dados.
-			**/		
-		}	
-	}     
-  return n;
+	uint32_t count = 0;
+	while(pstring[count] != NULL){
+		usart_serial_putchar(USART1, pstring[count]);
+		while(uart_is_tx_empty(ID_USART1)){
+			delay_ms(1);
+		}
+		count += 1;		
+	}
+	return (count);
 }
 
 /*
@@ -174,17 +170,15 @@ uint32_t usart_puts(uint8_t *pstring){
  * Retorna a quantidade de char lidos
  */
 uint32_t usart_gets(uint8_t *pstring){
-	uint32_t n=0;
-	
-	usart_serial_getchar(USART1, pstring+n);
-	
-	while(1){
-		if(pstring[n]=='\n'){
-			break;
-		n++;
-		usart_serial_getchar(USART1, pstring+n);	
+	uint32_t count = 0;
+	uint8_t valor;
+	while(pstring[count] != '\n'){
+		usart_serial_putchar(USART1, &valor);
+		pstring[count]=valor;
+		count += 1;
 	}
-  return n;  
+
+	return (count);  
 }
 
 /************************************************************************/
@@ -209,13 +203,12 @@ int main(void){
   USART1_init();
  
   /* Inicializa funcao de delay */
-  delay_init(sysclk_get_cpu_hz());
+  delay_init( sysclk_get_cpu_hz());
         
 	while (1) {
     sprintf(bufferTX, "%s \n", "Ola Voce");
     usart_puts(bufferTX);
     usart_gets(bufferRX);
-	usart_puts(bufferRX);
     delay_s(1);
 	}
 }
